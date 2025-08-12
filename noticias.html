@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notícias - CEEP Lourdes Carvalho</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<header>
+    <div class="menu-btn">
+    <i class="fas fa-bars"></i>
+</div>
+    <div class="logo">
+        <img src="img/logo.png" alt="Logo CEEP">
+        <span>CEEP Lourdes Carvalho</span>
+    </div>
+    <nav>
+        <ul>
+            <li><a href="index.html">Início</a></li>
+            <li><a href="noticias.html" class="active">Notícias</a></li>
+            <li><a href="sobre.html">Sobre</a></li>
+            <li><a href="cursos.html">Cursos</a></li>
+            <li><a href="eventos.html">Eventos</a></li>
+            <li><a href="horario.html">Horário das Turmas</a></li>
+            <li><a href="agendamentos.html">Agendamentos</a></li>
+        </ul>
+    </nav>
+</header>
+
+<section id="pagina-noticias">
+  <h1>Todas as Notícias</h1>
+  <div id="lista-noticias" class="lista-noticias"></div>
+
+  <div class="paginacao">
+    <button id="btn-anterior" disabled>Anterior</button>
+    <span id="pagina-atual">1</span>
+    <button id="btn-proxima">Próxima</button>
+  </div>
+</section>
+
+<script src="noticias.js"></script>
+
+<footer>
+    <p>&copy; 2025 CEEP Lourdes Carvalho - Todos os direitos reservados</p>
+    <div class="social-icons">
+        <a href="https://www.instagram.com/ceeplourdes/" target="_blank"><i class="fab fa-instagram"></i></a>
+        <a href="https://api.whatsapp.com/message/GAJNXSJ3HNGLE1?autoload=1&app_absent=0" target="_blank"><i class="fab fa-whatsapp"></i></a>
+        <a href="https://www.facebook.com/lourdes.carvalho.1441/?_rdr" target="_blank"><i class="fab fa-facebook"></i></a>
+        <a href="https://www.youtube.com/@ceeplourdes" target="_blank"><i class="fab fa-youtube"></i></a>
+    </div>
+</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+<script src="script.js"></script>
+
+</body>
+// noticias.js - carregamento com fallback JSONP e paginação 10 por 10
+document.addEventListener('DOMContentLoaded', () => {
+  const blogUrl = 'https://SEU-BLOG.blogspot.com'; // <--- troque aqui
+  const maxResults = 10;
+
+  let paginaAtual = 1;
+  let totalResults = null;
+
+  const btnPrev = document.getElementById('btn-anterior');
+  const btnNext = document.getElementById('btn-proxima');
+  const spanPagina = document.getElementById('pagina-atual');
+  const listaContainer = document.getElementById('lista-noticias');
+
+  if (!btnPrev || !btnNext || !spanPagina || !listaContainer) {
+    console.error('Elementos de paginação ou container não encontrados no HTML.');
+    return;
+  }
+
+  btnPrev.addEventListener('click', () => {
+    if (paginaAtual > 1) {
+      paginaAtual--;
+      carregarPagina();
+    }
+  });
+
+  btnNext.addEventListener('click', () => {
+    paginaAtual++;
+    carregarPagina();
+  });
+
+  // calcula startIndex a partir da página atual
+  function getStartIndex() {
+    return (paginaAtual - 1) * maxResults + 1;
+  }
+
+  async function carregarPagina() {
+    const startIndex = getStartIndex();
+    spanPagina.textContent = paginaAtual;
+    listaContainer.innerHTML = '<p>Carregando...</p>';
+
+    try {
+      const data = await fetchFeedWithJsonpFallback(blogUrl, startIndex, maxResults);
+      // pega total de resultados se disponível (openSearch$totalResults)
+      const total = data?.feed?.openSearch$totalResults?.$t;
+      totalResults = total ? parseInt(total, 10) : null;
+
+      const entries = data?.feed?.entry || [];
+      renderLista(entries);
+
+      // controle dos botões
+      if (totalResults) {
+        const totalPages = Math.ceil(totalResults / maxResults);
+        btnPrev.disabled = paginaAtual === 1;
+        btnNext.disabled = paginaAtual >= totalPages;
+      } else {
+        // fallback: habilita/desabilita com base no número de entradas retornadas
+        btnPrev.disabled = paginaAtual === 1;
+        btnNext.disabled = entries.length < maxResults;
+      }
+
+    } catch (err) {
+      console.error('Erro ao carregar feed:', err);
+      listaContainer.innerHTML = '<p>Erro ao carregar notícias. Tente novamente mais tarde.</p>';
+      btnPrev.disabled = paginaAtual === 1;
+      btnNext.disabled = true;
+    }
+  }
+
+  // tenta fetch normal, se falhar usa JSONP fallback
+  function fetchFeedWithJsonpFallback(blogUrl, startIndex, maxResults) {
+    const base = blogUrl.replace(/\/$/, '') + '/feeds/posts/default';
+    const params = `?alt=json&max-results=${maxResults}&start-index=${startIndex}`;
+    const url = base + params;
+
+    return fetch(url)
+      .then(resp => {
+        if (!resp.ok) throw new Error('fetch_response_not_ok');
+        return resp.json();
+      })
+      .catch(_ => jsonpFetch(base, startIndex, maxResults));
+  }
+
+  // JSONP loader - retorna a mesma estrutura JSON do Blogger
+  function jsonpFetch(base, startIndex, maxResults) {
+    return new Promise((resolve, reject) => {
+      const callbackName = '__cb_blogger_' + Date.now();
+      window[callbackName] = function(data) {
+        resolve(data);
+        cleanup();
+      };
+      const script = document.createElement('script');
+      script.src = `${base}?alt=json-in-script&max-results=${maxResults}&start-index=${startIndex}&callback=${callbackName}`;
+      script.onerror = () => {
+        reject(new Error('JSONP load failed'));
+        cleanup();
+      };
+      document.body.appendChild(script);
+
+      function cleanup() {
+        try { delete window[callbackName]; } catch(e) { window
+
+</html>
+
+
